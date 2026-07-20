@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{SERIES_NAME}} — Meeting Diff Analysis</title>
+<style>
+  :root {
+    --bg: #eef2ff;
+    --panel: #ffffff;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --up: #16a34a;   --up-soft: #dcfce7;
+    --down: #dc2626; --down-soft: #fee2e2;
+    --flat: #64748b; --flat-soft: #f1f5f9;
+    --c-base: #4f46e5;
+    --c-curr: #0ea5e9;
+    --shadow: 0 2px 10px rgba(15,23,42,0.07);
+    --r: 10px;
+
+    /* Tune these two to resize everything at once */
+    --banner-h: 62px;
+    --footer-h: 22px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100vh;
+    overflow: hidden;           /* single-screen, no scroll */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    font-size: clamp(10px, 1.1vw, 13px);  /* fluid base size */
+    line-height: 1.4;
+  }
+
+  /* ══ PAGE SHELL: banner → content → footer ══ */
+  .page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── BANNER ── */
+  .banner {
+    flex-shrink: 0;
+    height: var(--banner-h);
+    background: linear-gradient(130deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+    display: flex;
+    align-items: stretch;
+    padding: 0 1.6em;
+    gap: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .banner::before {
+    content: '';
+    position: absolute; top: -80%; right: 8%;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+    border-radius: 50%; pointer-events: none;
+  }
+
+  .banner-title {
+    flex: 1;
+    display: flex; flex-direction: column; justify-content: center;
+    padding-right: 1.2em;
+    position: relative; z-index: 1;
+  }
+  .eyebrow {
+    font-size: 0.72em; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.45); margin-bottom: 3px;
+  }
+  h1 {
+    font-size: clamp(13px, 1.5vw, 20px);
+    font-weight: 800; letter-spacing: -0.02em; color: #fff; line-height: 1.1;
+  }
+  .header-dates { font-size: 0.82em; color: rgba(255,255,255,0.5); margin-top: 2px; }
+
+  .banner-scores {
+    display: flex; align-items: center; gap: 0.5em;
+    padding: 0.5em 0;
+    position: relative; z-index: 1;
+  }
+  .score-card {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: var(--r);
+    padding: 0.4em 1em;
+    text-align: center;
+    min-width: 90px;
+  }
+  .score-lbl {
+    font-size: 0.68em; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.45);
+  }
+  .score-dt  { font-size: 0.68em; color: rgba(255,255,255,0.38); margin-bottom: 2px; }
+  .score-num {
+    font-size: clamp(18px, 2vw, 26px);
+    font-weight: 800; letter-spacing: -0.04em; line-height: 1;
+    color: #fff;
+  }
+  .score-card.base-card .score-num { color: #a5b4fc; }
+  .score-card.curr-card .score-num { color: #7dd3fc; }
+  .score-bar  { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.12); margin-top: 6px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 2px; }
+  .score-card.base-card .score-fill { background: #818cf8; }
+  .score-card.curr-card .score-fill { background: #38bdf8; }
+
+  .delta-card {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 0 0.8em; gap: 3px;
+  }
+  .delta-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-weight: 800; font-size: clamp(11px, 1.2vw, 15px);
+    padding: 0.3em 0.8em; border-radius: 999px; line-height: 1;
+  }
+  .delta-pill.up   { color: var(--up);   background: var(--up-soft); }
+  .delta-pill.down { color: var(--down); background: var(--down-soft); }
+  .delta-pill.flat { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.12); }
+  .delta-cap { font-size: 0.7em; color: rgba(255,255,255,0.4); text-align: center; }
+
+  /* ── CONTENT AREA: fills remaining height ── */
+  .content {
+    flex: 1;
+    min-height: 0;           /* critical — lets flex child shrink */
+    display: grid;
+    grid-template-columns: 1fr 30%;    /* charts | tables */
+    grid-template-rows: 1fr auto;
+    gap: 0.7em;
+    padding: 0.7em 1em;
+  }
+
+  /* ── LEFT: 2×2 chart grid ── */
+  .col-charts {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0.6em;
+  }
+
+  .chart-card {
+    min-height: 0;
+    background: var(--panel);
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--line);
+    padding: 0.6em 0.75em 0.5em;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .chart-title    { font-size: 0.85em; font-weight: 700; margin-bottom: 1px; flex-shrink: 0; }
+  .chart-subtitle { font-size: 0.74em; color: var(--muted); margin-bottom: 0.4em; flex-shrink: 0; }
+  .chart-body     { flex: 1; min-height: 0; position: relative; }
+  canvas          { display: block; }
+  .chart-legend   {
+    display: flex; gap: 0.8em; margin-top: 0.4em;
+    font-size: 0.74em; color: var(--muted); flex-shrink: 0;
+  }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+
+  /* ── RIGHT: tables + action items ── */
+  .col-tables {
+    min-height: 0;
+    display: flex; flex-direction: column;
+    gap: 0.6em;
+    overflow-y: auto;
+  }
+
+  .sec-title {
+    font-size: 0.72em; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--muted); margin-bottom: 0.4em; flex-shrink: 0;
+  }
+  .card {
+    background: var(--panel);
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--line);
+    overflow: hidden; flex-shrink: 0;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8em; }
+  th, td {
+    text-align: left; padding: 0.45em 0.7em;
+    vertical-align: top; border-bottom: 1px solid var(--line);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  thead th {
+    background: #fafafa; color: var(--muted);
+    font-size: 0.75em; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  td.dim { font-weight: 600; color: var(--ink); width: 32%; }
+  tr.total td { background: #fafafa; font-weight: 700; }
+  .na { color: var(--muted); font-style: italic; }
+
+  .tag {
+    display: inline-block; font-size: 0.78em; font-weight: 700;
+    padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  }
+  .tag.closed  { background: var(--up-soft);    color: var(--up); }
+  .tag.carried { background: var(--accent-soft); color: var(--accent); }
+  .tag.new     { background: #fef9c3; color: #a16207; }
+  .tag.dropped { background: var(--down-soft);  color: var(--down); }
+
+  .ai-grid { display: grid; gap: 0.4em; }
+  .ai-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.45em 0.65em;
+    display: flex; align-items: flex-start; gap: 0.5em;
+  }
+  .ai-card .tag { flex-shrink: 0; margin-top: 1px; }
+  .ai-body  { flex: 1; min-width: 0; }
+  .ai-text  { font-size: 0.8em; line-height: 1.35; margin-bottom: 1px; }
+  .ai-owner { font-size: 0.74em; color: var(--muted); }
+
+  /* ── INSIGHTS: bottom row spanning both columns ── */
+  .insights-row {
+    grid-column: 1 / -1;
+    flex-shrink: 0;
+  }
+  .insights {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5em;
+  }
+  .insights li {
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 0.45em 0.7em;
+    box-shadow: var(--shadow); font-size: 0.8em; line-height: 1.4;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    flex-shrink: 0;
+    height: var(--footer-h);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 0.72em;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ════════ BANNER ════════ -->
+<div class="banner">
+  <div class="banner-title">
+    <p class="eyebrow">Meeting diff analysis</p>
+    <h1>{{SERIES_NAME}}</h1>
+    <p class="header-dates">{{BASELINE_DATE}} &nbsp;→&nbsp; {{CURRENT_DATE}}</p>
+  </div>
+
+  <div class="banner-scores">
+    <div class="score-card base-card {{BASELINE_TREND_CLASS}}">
+      <p class="score-lbl">Baseline</p>
+      <p class="score-dt">{{BASELINE_DATE}}</p>
+      <div class="score-num">{{BASELINE_SCORE}}</div>
+      <!-- BASELINE_SCORE_PCT: higher score=100, lower is proportional -->
+      <div class="score-bar"><div class="score-fill" style="width:{{BASELINE_SCORE_PCT}}%"></div></div>
+    </div>
+
+    <div class="delta-card">
+      <!-- DELTA_CLASS: up/down/flat   DELTA_ARROW: ↑/↓/→ -->
+      <span class="delta-pill {{DELTA_CLASS}}">{{DELTA_ARROW}} {{DELTA_VALUE}}</span>
+      <span class="delta-cap">efficiency {{DELTA_WORD}}</span>
+    </div>
+
+    <div class="score-card curr-card {{CURRENT_TREND_CLASS}}">
+      <p class="score-lbl">Current</p>
+      <p class="score-dt">{{CURRENT_DATE}}</p>
+      <div class="score-num">{{CURRENT_SCORE}}</div>
+      <!-- CURRENT_SCORE_PCT: see BASELINE_SCORE_PCT -->
+      <div class="score-bar"><div class="score-fill" style="width:{{CURRENT_SCORE_PCT}}%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ CONTENT ════════ -->
+<div class="content">
+
+  <!-- LEFT: 2×2 charts -->
+  <div class="col-charts">
+
+    <div class="chart-card">
+      <p class="chart-title">Productivity inputs</p>
+      <p class="chart-subtitle">Topics (T), Results (R), Speakers (P)</p>
+      <div class="chart-body"><canvas id="chart-trp"></canvas></div>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:#4f46e5"></span>Baseline</span>
+        <span><span class="dot" style="background:#0ea5e9"></span>Current</span>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <p class="chart-title">Cost inputs</p>
+      <p class="chart-subtitle">Duration M (min) &amp; Repeated Topics Rt</p>
+      <div class="chart-body"><canvas id="chart-mrt"></canvas></div>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:#4f46e5"></span>Baseline</span>
+        <span><span class="dot" style="background:#0ea5e9"></span>Current</span>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <p class="chart-title">Productivity radar</p>
+      <p class="chart-subtitle">Normalized T / R / P comparison</p>
+      <div class="chart-body"><canvas id="chart-radar"></canvas></div>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:#4f46e5"></span>Baseline</span>
+        <span><span class="dot" style="background:#0ea5e9"></span>Current</span>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <p class="chart-title">Efficiency score</p>
+      <p class="chart-subtitle">{{BASELINE_SCORE}} vs {{CURRENT_SCORE}} — arc fills to relative max</p>
+      <div class="chart-body"><canvas id="chart-gauge"></canvas></div>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:#4f46e5"></span>Baseline</span>
+        <span><span class="dot" style="background:#0ea5e9"></span>Current</span>
+      </div>
+    </div>
+
+  </div><!-- /col-charts -->
+
+  <!-- RIGHT: tables + action items -->
+  <div class="col-tables">
+
+    <div>
+      <p class="sec-title">Side-by-side comparison</p>
+      <div class="card">
+        <table>
+          <thead>
+            <tr><th style="width:32%">Dimension</th><th>{{BASELINE_DATE}}</th><th>{{CURRENT_DATE}}</th></tr>
+          </thead>
+          <tbody>
+            <!-- SIDE_BY_SIDE_ROWS: one <tr> per dimension.
+                 <tr><td class="dim">Topics &amp; decisions</td><td>…</td><td>…</td></tr>
+                 Use <span class="na">not available</span> when data is missing. -->
+            {{SIDE_BY_SIDE_ROWS}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="sec-title">Efficiency formula breakdown</p>
+      <div class="card">
+        <table>
+          <thead>
+            <tr><th style="width:32%">Input</th><th>{{BASELINE_DATE}}</th><th>{{CURRENT_DATE}}</th></tr>
+          </thead>
+          <tbody>
+            <!-- EFFICIENCY_ROWS: T, R, P, M, Rt rows, then:
+                 <tr class="total"><td class="dim">Efficiency score (E)</td><td>…</td><td>…</td></tr> -->
+            {{EFFICIENCY_ROWS}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="sec-title">Action items</p>
+      <div class="ai-grid">
+        <!-- ACTION_ITEM_ROWS: one .ai-card per item:
+             <div class="ai-card">
+               <span class="tag closed">Closed</span>
+               <div class="ai-body">
+                 <p class="ai-text">Item description</p>
+                 <p class="ai-owner">Owner</p>
+               </div>
+             </div>
+             Tag classes: closed / carried / new / dropped -->
+        {{ACTION_ITEM_ROWS}}
+      </div>
+    </div>
+
+  </div><!-- /col-tables -->
+
+  <!-- BOTTOM ROW: insights spanning full width -->
+  <div class="insights-row">
+    <p class="sec-title">Key insights</p>
+    <!-- INSIGHTS: 3–6 <li> items, most significant first. -->
+    <ul class="insights">
+      {{INSIGHTS}}
+    </ul>
+  </div>
+
+</div><!-- /content -->
+
+<footer>Generated by the meeting-diff-analysis skill</footer>
+
+</div><!-- /page -->
+
+<!-- ════════ CHART RENDERER (pure Canvas — no external deps) ════════ -->
+<script>
+const DATA = {
+  baseline: { T: {{BASELINE_T}}, R: {{BASELINE_R}}, P: {{BASELINE_P}}, M: {{BASELINE_M}}, Rt: {{BASELINE_RT}}, E: {{BASELINE_SCORE}} },
+  current:  { T: {{CURRENT_T}},  R: {{CURRENT_R}},  P: {{CURRENT_P}},  M: {{CURRENT_M}},  Rt: {{CURRENT_RT}},  E: {{CURRENT_SCORE}} }
+};
+
+const CB  = '#4f46e5', CC  = '#0ea5e9';
+const CBA = 'rgba(79,70,229,0.15)', CCA = 'rgba(14,165,233,0.15)';
+
+// Fit canvas exactly to its .chart-body container
+function initCanvas(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const box = el.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = box.width, h = box.height;
+  el.width  = w * dpr; el.height = h * dpr;
+  el.style.width = w + 'px'; el.style.height = h + 'px';
+  const ctx = el.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w, h };
+}
+
+function rRect(ctx, x, y, w, h, r) {
+  if (h < 0) { y += h; h = -h; }
+  r = Math.min(r, h / 2, w / 2);
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function drawGroupedBar(id, labels, bVals, cVals) {
+  const c = initCanvas(id); if (!c) return;
+  const { ctx, w, h } = c;
+  const pad = { t: 10, r: 6, b: 26, l: 28 };
+  const cw = w - pad.l - pad.r, ch = h - pad.t - pad.b;
+  const n = labels.length, gw = cw / n;
+  const bw = Math.max(gw * 0.28, 5);
+  const maxV = Math.max(...bVals, ...cVals, 1);
+
+  ctx.font = '8px system-ui'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + ch - (i/4)*ch;
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+cw, y); ctx.stroke();
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(+(maxV*i/4).toFixed(1), pad.l-3, y+3);
+  }
+  labels.forEach((lbl, i) => {
+    const cx = pad.l + i*gw + gw/2;
+    const bh = (bVals[i]/maxV)*ch;
+    ctx.fillStyle = CB; rRect(ctx, cx-bw-2, pad.t+ch-bh, bw, bh, 3); ctx.fill();
+    const xh = (cVals[i]/maxV)*ch;
+    ctx.fillStyle = CC; rRect(ctx, cx+2, pad.t+ch-xh, bw, xh, 3); ctx.fill();
+    ctx.fillStyle = '#64748b'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(lbl, cx, h - pad.b + 12);
+  });
+}
+
+function drawRadar(id, labels, bVals, cVals) {
+  const c = initCanvas(id); if (!c) return;
+  const { ctx, w, h } = c;
+  const cx = w/2, cy = h/2, r = Math.min(w, h) * 0.3;
+  const n = labels.length, maxV = Math.max(...bVals, ...cVals, 1);
+
+  for (let ring = 1; ring <= 4; ring++) {
+    const fr = ring/4; ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = (i/n)*2*Math.PI - Math.PI/2;
+      i===0 ? ctx.moveTo(cx+Math.cos(a)*r*fr, cy+Math.sin(a)*r*fr)
+            : ctx.lineTo(cx+Math.cos(a)*r*fr, cy+Math.sin(a)*r*fr);
+    }
+    ctx.closePath(); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  for (let i = 0; i < n; i++) {
+    const a = (i/n)*2*Math.PI - Math.PI/2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx+Math.cos(a)*r, cy+Math.sin(a)*r);
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = 'bold 9px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(labels[i], cx+Math.cos(a)*(r+13), cy+Math.sin(a)*(r+13));
+  }
+  function poly(vals, stroke, fill) {
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = (i/n)*2*Math.PI - Math.PI/2, f = vals[i]/maxV;
+      i===0 ? ctx.moveTo(cx+Math.cos(a)*r*f, cy+Math.sin(a)*r*f)
+            : ctx.lineTo(cx+Math.cos(a)*r*f, cy+Math.sin(a)*r*f);
+    }
+    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke();
+    for (let i = 0; i < n; i++) {
+      const a = (i/n)*2*Math.PI - Math.PI/2, f = vals[i]/maxV;
+      ctx.beginPath(); ctx.arc(cx+Math.cos(a)*r*f, cy+Math.sin(a)*r*f, 3, 0, 2*Math.PI);
+      ctx.fillStyle = stroke; ctx.fill();
+    }
+  }
+  poly(bVals, CB, CBA); poly(cVals, CC, CCA);
+}
+
+function drawGauges(id, bE, cE) {
+  const c = initCanvas(id); if (!c) return;
+  const { ctx, w, h } = c;
+  const maxE = Math.max(bE, cE, 0.01);
+  [{val:bE, color:CB, label:'Baseline', side:0},
+   {val:cE, color:CC, label:'Current',  side:1}
+  ].forEach(({val, color, label, side}) => {
+    const gw = w/2, gcx = gw*side + gw/2, gcy = h*0.56;
+    const gr = Math.min(gw*0.36, h*0.38);
+    const frac = Math.min(val/maxE, 1);
+    ctx.beginPath(); ctx.arc(gcx, gcy, gr, Math.PI, 2*Math.PI);
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(gcx, gcy, gr, Math.PI, Math.PI + Math.PI*frac);
+    ctx.strokeStyle = color; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.fillStyle = color; ctx.font = 'bold 15px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(typeof val==='number' ? val.toFixed(2) : val, gcx, gcy-4);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '9px system-ui';
+    ctx.fillText(label, gcx, gcy + gr*0.48 + 8);
+  });
+}
+
+function renderAll() {
+  const b = DATA.baseline, cu = DATA.current;
+  drawGroupedBar('chart-trp', ['T (Topics)','R (Results)','P (Speakers)'], [b.T,b.R,b.P], [cu.T,cu.R,cu.P]);
+  drawGroupedBar('chart-mrt', ['M (Minutes)','Rt (Repeated)'],             [b.M,b.Rt],     [cu.M,cu.Rt]);
+  drawRadar('chart-radar',    ['T','R','P'],                               [b.T,b.R,b.P], [cu.T,cu.R,cu.P]);
+  drawGauges('chart-gauge',   parseFloat(b.E), parseFloat(cu.E));
+}
+
+// Re-render on any resize so charts always fill their containers
+window.addEventListener('load', renderAll);
+window.addEventListener('resize', renderAll);
+</script>
+
+</body>
+</html>
