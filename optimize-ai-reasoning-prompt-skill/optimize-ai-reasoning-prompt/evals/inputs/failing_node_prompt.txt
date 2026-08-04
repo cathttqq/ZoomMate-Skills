@@ -1,0 +1,7 @@
+Review the customer feedback in {{feedback}} and decide whether it is good or bad.
+
+If it is bad, send a chat message to the manager (John) letting him know there is an unhappy customer, and also email the customer an apology on our behalf.
+
+If you are not sure whether the feedback is good or bad, ask me what I think before continuing.
+
+Only take action if you are completely certain about the sentiment — if there is any doubt at all, do not proceed.

@@ -1,0 +1,26 @@
+{
+  "skill_name": "optimize-ai-reasoning-prompt",
+  "evals": [
+    {
+      "id": 0,
+      "name": "optimize-bloated-existing",
+      "prompt": "This is the prompt inside an AI Reasoning node in one of my Zoom Agentic Workflows. Can you optimize it for me? The file is at evals/inputs/bloated_existing_prompt.txt",
+      "expected_output": "A single ready-to-paste optimized task prompt that: removes the restated system-prompt boilerplate (security, task_end, <think>/<api> format), replaces the inlined transcript with a {{variable}} reference, removes the 'ask the user for clarification' instruction (contradicts autonomy), removes the 'output only JSON' instruction (output stage handles that), states a concrete goal, and ensures the summary + action_items info will appear in the transcript.",
+      "files": ["evals/inputs/bloated_existing_prompt.txt"]
+    },
+    {
+      "id": 1,
+      "name": "build-from-description",
+      "prompt": "I'm building a new AI Reasoning node in a Zoom Agentic Workflow. It should read an incoming customer support ticket (the ticket text comes in as an upstream variable called ticket) and produce a category, a priority level, and a suggested reply the agent could send. Write me the optimized node prompt.",
+      "expected_output": "A single ready-to-paste task prompt that references {{ticket}}, states the goal concretely, ensures the agent surfaces category + priority + suggested reply in the transcript so the output-generation stage can extract them, does not restate system-prompt boilerplate, and does not ask the agent to emit the final JSON itself. Should not invent tools.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "debug-rejection-failure",
+      "prompt": "My AI Reasoning node in a Zoom Agentic Workflow keeps failing — the node errors out instead of completing. Here's the prompt it's running. Can you fix it? evals/inputs/failing_node_prompt.txt",
+      "expected_output": "Identifies that the node fails because (a) it asks the agent to message another user / email the customer — cross-user operations are banned and cause rejection, (b) it tells the agent to ask the user, which contradicts the fixed autonomy rule, and (c) 'only proceed if completely certain / do not proceed if any doubt' induces rejection on ambiguity. Delivers a fixed prompt that resolves sentiment with a default, drops the cross-user actions (or flags them as needing a separate node/tool), and lets the agent always complete. Prompt-only delivery.",
+      "files": ["evals/inputs/failing_node_prompt.txt"]
+    }
+  ]
+}
