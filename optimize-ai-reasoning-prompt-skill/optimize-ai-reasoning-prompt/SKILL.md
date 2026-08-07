@@ -38,9 +38,10 @@ When the node runs, it does this (see `references/agent-node-internals.md` for t
    control and should not restate. The system prompt alone handles: prompt-injection defense and the
    `[Read Only Content]` data markers, the `<think>/<api>/<response>` output format, the **mandatory
    `task_end()` call**, full **autonomy** ("never ask for clarification, use reasonable defaults"),
-   idempotency / de-duplication via conversation history, `cache_id` handling, hiding technical IDs,
-   an absolute **ban on cross-user operations**, and Zoom `@mention` formatting. The agent calls your
-   configured tools in a loop until it calls `task_end()`.
+   idempotency / de-duplication via conversation history, `cache_id` handling, hiding technical IDs, and
+   Zoom `@mention` formatting. The agent calls your configured tools in a loop until it calls `task_end()`
+   — **including tools that perform actions** (sending a chat message, emailing, creating a doc, posting to
+   a channel). Those actions are the node's job, not something outside it.
 
 2. **Evaluation (a hidden success gate).** A *separate* LLM call reads the whole transcript and returns
    `{"success": true/false, ...}`. **If it returns `false`, the entire node errors out.** It is
@@ -62,14 +63,21 @@ Three consequences fall directly out of this model, and they drive every rewrite
   Repeating it wastes tokens and occasionally conflicts with the real system prompt. Cut it.
 - **Keep the agent attempting, never rejecting.** Ambiguity is the enemy, because the agent is autonomous
   and will either guess (fine) or reject (fails the node). Resolve ambiguity *for* it and supply defaults.
-- **Flag cross-user side effects — they silently kill the node.** The fixed system prompt hard-bans acting
-  on *other people* (messaging/emailing them, changing their access, sharing or editing their data). If the
-  task asks for that, the agent rejects and the node fails — and no amount of prompt wording fixes it,
-  because the ban is in the system prompt, not your prompt. Distinguish this from legitimate **in-scope**
-  tool use (acting within the user's own account/resources), which is fine. When you spot a cross-user
-  action, don't bury it in a caveat: call it out plainly, and move it to a **dedicated downstream action
-  node** (e.g. a Send-Chat / Send-Email node) or tell the user it isn't permitted here. See the check in
-  `references/optimization-checklist.md`.
+- **Treat actions as the node's job — never warn that a tool action "would fail."** The Agent node acts
+  *through connected tools*. If the task says to send a chat message, post to a channel, email someone, or
+  create/update something, assume the matching tool is (or will be) attached and just name the action
+  clearly — that's a normal supported operation, not a failure and not something to move "outside" the node.
+  **Do not** rewrite such actions out, tell the user to add a separate downstream Send-Chat/Send-Email node,
+  or attach a caveat that "this node can't do that / this part might fail." That kind of warning is exactly
+  what to avoid: it's usually wrong (the tool exists) and it clutters the deliverable. The only thing worth a
+  brief, neutral note is a genuine *dependency* — e.g. "(assumes a Send Chat Message tool is connected to
+  this node)" — phrased as an assumption, never as a failure.
+- **Format outgoing Zoom messages as Markdown.** Whenever the task sends a message to a person or a channel
+  (e.g. via a Send Chat Message tool), the rewritten prompt must instruct the agent to write the message body
+  in **Markdown** — bold, bullet/numbered lists, headings, and links as appropriate — so it renders cleanly
+  in Zoom Team Chat rather than as a wall of plain text. Keep the `@mention` syntax the system prompt already
+  requires (don't convert mentions into Markdown links). This applies to every message-sending action,
+  whether you're optimizing an existing prompt or building one from a description.
 - **Make the transcript contain what the schema needs.** The output stage can only surface facts the
   agent actually produced. If a schema field has no home in the conversation, name it in the task so the
   agent gathers or states it.
@@ -116,9 +124,9 @@ extract every schema field. Only needed when the node has an output schema.
 ```
 
 Then pressure-test the draft against the three stages: Would the agent ever say "I can't"? (rejection →
-node failure) — **and specifically, does the task ask the agent to act on another user?** (cross-user →
-guaranteed rejection; pull it into a dedicated action node instead). Does every output-schema field have a
-source in the intended transcript? Did you re-state anything the fixed system prompt already covers? (cut it).
+node failure — from ambiguity or contradiction, *not* from a normal tool action). Does every output-schema
+field have a source in the intended transcript? Did you re-state anything the fixed system prompt already
+covers? (cut it).
 
 ### 4. Deliver
 
@@ -163,8 +171,11 @@ designed together:
   editing a **Condition node** (LLM-based branching, pinned system prompt), a **Tool node** (deterministic
   single-tool call with field mappings), or a plain **LLM node** (has its own `system_prompt` field), say so —
   the mechanics differ and this skill's advice won't transfer.
-- **Don't invent tools, variables, or schema fields.** If the rewrite depends on a tool or variable you can
-  only assume exists, mark it as an assumption instead of quietly baking it in.
+- **Don't fabricate specifics, but don't be timid about actions either.** Don't invent exact tool names,
+  variable names, or schema fields and present them as real. But when the task calls for an action, it's fine
+  to assume the node has (or will get) a tool for it — describe the action plainly and, if the dependency is
+  worth flagging, add a one-line neutral assumption note. Assuming a needed tool exists is normal; warning
+  that the action "would fail" is the thing to avoid.
 - **Preserve intent.** When optimizing, keep the user's actual task and constraints; tighten wording, resolve
   ambiguity, and cut redundancy — don't silently change what the node does.
 - **Don't fight the fixed stages.** No "output ONLY JSON and nothing else", no re-litigating security, no

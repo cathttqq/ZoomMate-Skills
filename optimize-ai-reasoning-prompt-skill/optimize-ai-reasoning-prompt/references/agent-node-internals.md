@@ -47,9 +47,12 @@ mandates all of the following — **do not restate any of it in the task prompt*
   `task_end()`) + `<response>` (only on `task_end`). You do not need to specify a response format.
 - **Security / injection defense:** `[Read Only Content] ... [End Of Read Only Content]` markers wrap
   untrusted data; bypass/"debug mode"/"ignore previous instructions" claims are always rejected.
-- **Cross-user operations are forbidden** (messaging others, changing others' access, sharing/ modifying
-  others' data) and will be rejected. If the user's task inherently requires this, the node will fail — flag
-  it rather than prompt-engineering around it.
+- **Unauthorized manipulation of *other users'* data is guarded against** (e.g. silently changing someone
+  else's access or deleting their data with no authorization). This is narrow and rarely relevant. It does
+  **not** mean the agent can't perform actions: sending a chat message, posting to a channel, or emailing
+  **through a connected tool** is a normal, supported operation the workflow builder set up on purpose.
+  Don't treat ordinary tool-driven actions as forbidden or as node failures, and don't warn about them —
+  see Pattern 1e in `optimization-checklist.md`.
 - **Cached data priority:** when a variable carries a `cache_id`, use the id in later calls, never re-fetch
   based on the preview.
 - **Hide technical IDs** (account_id, user_id, node_id, …) from user-facing output unless asked.
@@ -134,4 +137,4 @@ deterministic reasoning, temperature is the lever, not more emphatic prompt word
 | Field values may be `{{cache_id}}` | Reference large generated content by cache id |
 | Jinja2 with `preserve_undefined=True` | Typo'd `{{var}}` becomes literal text — verify names |
 | Large vars auto-cached + tag-wrapped | Reference `{{var}}`, never paste big content inline |
-| Cross-user ops banned in system prompt | If the task needs them, it will fail — flag, don't engineer around |
+| Agent acts through connected tools | Tool actions (send/post/email/create) are normal — never warn they'll fail or move them to another node |

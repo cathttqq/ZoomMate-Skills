@@ -37,24 +37,22 @@ leaving the order implicit invites the agent to skip or reorder steps.
 
 - Fix: enumerate the steps and make the data dependency explicit ("using the doc id from step 1, …").
 
-**Pattern 1e — Cross-user side effect (the silent node-killer).** The single most under-diagnosed failure.
-The fixed system prompt **hard-bans acting on other people**: messaging or emailing them, adding/removing
-their access, sharing content with them, or editing/deleting their data. When a task asks for any of these,
-the agent rejects → the node fails, and *no prompt wording can override it* because the ban lives in the
-system prompt. It's easy to miss because the failing prompt reads as a perfectly reasonable instruction
-("if the feedback is bad, message the manager and email the customer").
+**Pattern 1e — Mistaking a normal tool action for a failure (over-cautious rewrite).** The Agent node acts
+*through connected tools*, so actions like "send a chat message," "post the agenda to the channel," "email
+the customer," or "create a doc" are the node doing its job — not something that lives "outside" the node.
+The failure mode here is the *rewrite* over-reacting: stripping the action out, telling the user to add a
+separate downstream Send-Chat / Send-Email node, or bolting on a caveat like "this node can't send the
+message itself — that would fail the node." That output is usually wrong (the workflow builder connected the
+tool precisely so the agent can do this) and it clutters the deliverable with a false warning. Avoid it —
+this is the exact anti-pattern this skill exists to prevent.
 
-- **How to spot it:** does the task have the agent *do something to or for a person who isn't the workflow's
-  own user*? Sending, forwarding, notifying, sharing, granting, editing-someone-else's — those are the tells.
-- **Distinguish from in-scope tool use.** Acting within the user's *own* account/resources (reading their
-  docs, searching their meetings, creating something they own) is fine and encouraged — the ban is
-  specifically about *other users*. Don't over-correct and strip legitimate tools.
-- **Fix:** don't bury it in a soft caveat and leave the action in the prompt — that ships a node that still
-  fails. Call it out plainly, and either (a) move the cross-user action to a **dedicated downstream action
-  node** (a Send-Chat / Send-Email node wired after this one, reached via a Condition branch on this node's
-  output), keeping the AI Reasoning node to the judgment/decision it *can* make; or (b) if there's no such
-  node available, tell the user the operation isn't permitted from here. Keep this proportionate: flag and
-  reroute the cross-user step, don't rearchitect the parts of the task that were fine.
+- **How to handle an action:** keep it in the prompt, name it plainly (which action, to whom/where, with
+  what content), and let the agent call the tool. Treat it the same as any other tool use.
+- **The only note worth adding** is a genuine *dependency*, phrased neutrally as an assumption — e.g.
+  "(assumes a Send Chat Message tool is connected to this node)" — never as "this will fail" or "move this
+  elsewhere." If you truly can't tell whether a capability exists, ask the user rather than warning.
+- **Don't strip legitimate actions or tools.** Reading/searching the user's data and performing actions via
+  connected tools are both normal. Optimize *how* the action is instructed; don't remove it.
 
 ---
 
@@ -122,6 +120,17 @@ serialization. That's the fixed system prompt's domain and the guidance just add
 
 - Fix: specify *which* tool and *what inputs conceptually*, not the call syntax.
 
+**Pattern 3e — Messages sent to Zoom without Markdown formatting.** When the node sends a message to a person
+or a channel (Send Chat Message and similar tools), a plain-text blob renders poorly in Zoom Team Chat. The
+prompt should tell the agent to compose the message body in **Markdown**.
+
+- Fix: add an instruction such as `Format the message in Markdown — use bold for key points, bullet or
+  numbered lists for multiple items, and Markdown links for URLs — so it reads well in Zoom Team Chat.`
+- Keep `@mentions` in the mention syntax the system prompt already enforces; don't rewrite those as Markdown
+  links. Markdown governs the message *body*, not the mention mechanics.
+- This is content-formatting guidance for the message, distinct from Pattern 3d (which is about not dictating
+  the tool-call *syntax*) — telling the agent the message should be Markdown is fine and wanted.
+
 ---
 
 ## Goal 4 — Token / cost efficiency
@@ -154,17 +163,16 @@ formatting the user actually consumes.
 After any rewrite, run the draft through these — they catch the failures the four goals don't individually:
 
 1. **Rejection test.** Is there any reading where the agent concludes "I can't/won't do this"? Ambiguity,
-   contradiction, and infeasibility all trigger rejection → node failure. Remove the trigger or supply the
-   default.
-1b. **Cross-user test (do this one explicitly — it's the easiest to miss).** Does the task have the agent act
-   on *another person* (message/email them, change their access, share/edit their data)? That's hard-banned
-   and fails the node regardless of wording (Pattern 1e). Reroute the cross-user step to a dedicated action
-   node or tell the user it's not permitted — don't leave it inline behind a caveat. Leave legitimate
-   in-scope tool use alone.
+   contradiction, and infeasibility trigger rejection → node failure. A *normal tool action* (sending,
+   posting, emailing, creating via a connected tool) is **not** a rejection trigger — don't treat it as one.
+   Remove genuine triggers or supply the default.
 2. **Transcript-coverage test.** For each output-schema field, point to the exact moment in the intended
    transcript where its value appears. No source → add a `[What to surface]` instruction.
 3. **Duplication test.** Scan for anything the fixed system prompt already guarantees (see the list in
    `agent-node-internals.md` §2). Every such line is pure cost — delete it.
+4. **No-false-warning test.** Did the rewrite add any caveat that a tool action "can't be done here / would
+   fail the node / belongs in a separate node"? If so, remove it and keep the action — that warning is the
+   anti-pattern in Pattern 1e. At most, leave a one-line neutral note that a tool is assumed connected.
 
 ## Note on branching
 

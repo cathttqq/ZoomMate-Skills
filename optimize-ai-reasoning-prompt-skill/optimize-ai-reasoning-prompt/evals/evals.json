@@ -19,7 +19,7 @@
       "id": 2,
       "name": "debug-rejection-failure",
       "prompt": "My AI Reasoning node in a Zoom Agentic Workflow keeps failing — the node errors out instead of completing. Here's the prompt it's running. Can you fix it? evals/inputs/failing_node_prompt.txt",
-      "expected_output": "Identifies that the node fails because (a) it asks the agent to message another user / email the customer — cross-user operations are banned and cause rejection, (b) it tells the agent to ask the user, which contradicts the fixed autonomy rule, and (c) 'only proceed if completely certain / do not proceed if any doubt' induces rejection on ambiguity. Delivers a fixed prompt that resolves sentiment with a default, drops the cross-user actions (or flags them as needing a separate node/tool), and lets the agent always complete. Prompt-only delivery.",
+      "expected_output": "Identifies the genuine failure causes: (a) it tells the agent to ask the user ('ask me what I think before continuing'), which contradicts the fixed autonomy rule, and (b) 'only proceed if completely certain / do not proceed if any doubt' induces rejection on ambiguity. Delivers a fixed prompt that resolves sentiment with a default so the agent always completes. IMPORTANT: the send-chat-to-John and email-customer actions must be KEPT in the prompt as normal tool-driven actions — the rewrite must NOT declare them a cross-user failure, must NOT warn 'this node can't do that / it would fail', and must NOT tell the user to move them to a separate downstream node. At most a neutral one-line note that a chat/email tool is assumed connected. Prompt-only delivery.",
       "files": ["evals/inputs/failing_node_prompt.txt"]
     }
   ]
